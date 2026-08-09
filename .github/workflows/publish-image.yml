@@ -1,22 +1,12 @@
 name: Publish Docker image
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Image tag to publish (for example v1.0.0)
-        required: true
-        type: string
-      publish_latest:
-        description: Also move the latest tag to this image
-        required: false
-        default: false
-        type: boolean
+  push:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   attestations: write
   id-token: write
@@ -24,17 +14,17 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  VERSION: ${{ github.event.release.tag_name || inputs.tag }}
+  VERSION: ${{ github.ref_name }}
 
 jobs:
   publish:
-    name: Build and publish
+    name: Build, publish and release
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
+          ref: ${{ github.ref }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -61,7 +51,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ env.VERSION }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.VERSION }}
             type=semver,pattern={{major}},value=${{ env.VERSION }}
-            type=raw,value=latest,enable=${{ (github.event_name == 'release' && github.event.release.prerelease != true) || inputs.publish_latest }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push multi-architecture image
         id: push
@@ -85,3 +75,14 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$VERSION" == *-* ]]; then
+            gh release create "$VERSION" --title "$VERSION" --generate-notes --prerelease
+          else
+            gh release create "$VERSION" --title "$VERSION" --generate-notes --latest
+          fi
+
