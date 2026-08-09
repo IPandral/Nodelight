@@ -129,7 +129,7 @@ The workflow publishes these images to GitHub Container Registry:
 | `v1.2.3` tag | `v1.2.3`, `1.2.3`, `1.2`, and `1`, plus a GitHub Release |
 | `v1.2.3-rc.1` | `v1.2.3-rc.1`, `1.2.3-rc.1` (never `latest`) |
 
-Images include an SBOM and build provenance attestation. A GitHub Release is created only after the versioned image build, publication, and attestation succeed, so users never see a release pointing to a failed container build.
+Images include an SBOM and, when the repository is public, a GitHub build-provenance attestation. A GitHub Release is created only after the versioned image build and publication succeed, so users never see a release pointing to a failed container build.
 
 If the first publishing run is denied, check the repository's **Settings â†’ Actions â†’ General â†’ Workflow permissions** and allow workflows to read and write packages. Organizations can also restrict package publishing centrally.
 
