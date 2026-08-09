@@ -12,7 +12,7 @@ Once this repository has a GitHub Release, GitHub Actions automatically publishe
 2. Set your server name and a strong password in `.env`, then add the published image:
 
    ```dotenv
-   NODELIGHT_IMAGE=ghcr.io/ipandral/computer-usage-dashboard:latest
+   NODELIGHT_IMAGE=ghcr.io/ipandral/nodelight:latest
    ```
 
 3. Pull and run it:
@@ -31,7 +31,7 @@ To run the latest published image without cloning this repository, create a `com
 ```yaml
 services:
   nodelight:
-    image: ghcr.io/ipandral/computer-usage-dashboard:latest
+    image: ghcr.io/ipandral/nodelight:latest
     container_name: nodelight
     restart: unless-stopped
     ports:
@@ -70,7 +70,7 @@ volumes:
 Pull the image and start the dashboard:
 
 ```bash
-docker pull ghcr.io/ipandral/computer-usage-dashboard:latest
+docker pull ghcr.io/ipandral/nodelight:latest
 docker compose up -d
 ```
 
