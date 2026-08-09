@@ -87,7 +87,7 @@ Edit `.env` before running Docker Compose.
 
 The Compose file mounts `/proc`, `/sys`, `/etc`, and `/` into the container as read-only paths. Nodelight uses them to report real host metrics instead of the container's own limits. The container drops Linux capabilities, runs as an unprivileged user, uses a read-only filesystem, and does **not** mount the Docker socket.
 
-Some virtual machines do not expose temperature sensors. In that case the dashboard displays “Not exposed” and continues normally.
+Some virtual machines do not expose temperature sensors. In that case the dashboard displays â€œNot exposedâ€ and continues normally.
 
 ## Network safety
 
@@ -112,17 +112,25 @@ Open `http://localhost:8080`. When host Linux files are unavailable, development
 
 ## Publishing a release
 
-The [publish-image workflow](.github/workflows/publish-image.yml) starts whenever a GitHub Release is published. Create a release with a semantic version tag such as `v1.0.0`; it publishes these tags to GitHub Container Registry:
+The [publish-image workflow](.github/workflows/publish-image.yml) does the whole release process from one version tag: it builds the image, publishes it to GitHub Container Registry, creates the GitHub Release with generated notes, and attaches the build attestation. Once the intended commit is on `main`, create and push a semantic version tag:
+
+```bash
+git tag -a v1.0.0 -m "v1.0.0"
+git push origin v1.0.0
+```
+
+The workflow publishes these tags to GitHub Container Registry:
 
 | Release | Published image tags |
 | --- | --- |
 | `v1.2.3` | `v1.2.3`, `1.2.3`, `1.2`, `1`, `latest` |
 | `v1.2.3-rc.1` | `v1.2.3-rc.1`, `1.2.3-rc.1` (never `latest`) |
 
-Images include an SBOM and build provenance attestation. The workflow can also be started manually from the Actions tab when needed; manual runs only update `latest` when the **Also move the latest tag** option is selected.
+Images include an SBOM and build provenance attestation. A release is created only after the image build, publication, and attestation succeed, so users never see a release pointing to a failed container build.
 
-If the first publishing run is denied, check the repository's **Settings → Actions → General → Workflow permissions** and allow workflows to read and write packages. Organizations can also restrict package publishing centrally.
+If the first publishing run is denied, check the repository's **Settings â†’ Actions â†’ General â†’ Workflow permissions** and allow workflows to read and write packages. Organizations can also restrict package publishing centrally.
 
 ## Contributing and support
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), rather than in public issues. Bug reports and feature requests are welcome through the GitHub issue templates.
+
