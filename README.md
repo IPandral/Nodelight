@@ -9,10 +9,10 @@ It runs as a single Docker container, has no external services or analytics, and
 Once this repository has a GitHub Release, GitHub Actions automatically publishes a multi-architecture image (x86_64 and ARM64) to GitHub Container Registry. This is the simplest way to install Nodelight on a server without cloning the source code.
 
 1. Create a directory on the server and place `docker-compose.release.yml` and `.env.example` inside it. Rename `.env.example` to `.env`.
-2. Set your server name and a strong password in `.env`, then add the published image. Replace the placeholders with the GitHub repository owner and repository name:
+2. Set your server name and a strong password in `.env`, then add the published image:
 
    ```dotenv
-   NODELIGHT_IMAGE=ghcr.io/OWNER/REPOSITORY:latest
+   NODELIGHT_IMAGE=ghcr.io/ipandral/computer-usage-dashboard:latest
    ```
 
 3. Pull and run it:
@@ -23,6 +23,53 @@ Once this repository has a GitHub Release, GitHub Actions automatically publishe
    ```
 
 For predictable upgrades, pin a release tag such as `:v1.0.0` rather than `:latest`. After publishing the first release, confirm the package is public in the repository's **Packages** settings so anonymous Docker pulls work.
+
+## Copy-ready Docker Compose
+
+To run the latest published image without cloning this repository, create a `compose.yaml` file on the server with the following contents:
+
+```yaml
+services:
+  nodelight:
+    image: ghcr.io/ipandral/computer-usage-dashboard:latest
+    container_name: nodelight
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DASHBOARD_NAME: Home Server
+      DASHBOARD_USERNAME: admin
+      DASHBOARD_PASSWORD: change-this-to-a-strong-password
+      TZ: Australia/Perth
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ETC: /host/etc
+      HOST_ROOT: /host/root
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc:/host/etc:ro
+      - /:/host/root:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 128m
+    cpus: 0.50
+```
+
+Pull the image and start the dashboard:
+
+```bash
+docker pull ghcr.io/ipandral/computer-usage-dashboard:latest
+docker compose up -d
+```
+
+Open `http://YOUR_SERVER_IP:8080` and sign in with the credentials in the Compose file. Replace the example password before starting the container.
 
 ## Start it on Ubuntu
 
