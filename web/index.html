@@ -21,6 +21,8 @@
 
       <nav class="nav" aria-label="Dashboard sections">
         <a class="active" href="#overview">Overview</a>
+        <a href="#storage">Storage</a>
+        <a href="#history">History</a>
         <a href="#hardware">Hardware</a>
         <a href="#processes">Processes</a>
       </nav>
@@ -111,6 +113,48 @@
           </div>
           <div class="network-total"><span>All-time since boot</span><strong id="networkTotal">—</strong></div>
         </article>
+      </section>
+
+      <section class="panel mount-panel" id="storage">
+        <div class="section-heading">
+          <div><span class="kicker amber">Storage health</span><h2>Every mounted drive</h2></div>
+          <span class="mount-summary" id="mountSummary">Reading mounts…</span>
+        </div>
+        <p class="section-copy">Usage is checked for every physical or network filesystem the host exposes. Drives over 80% are flagged early; 95% is critical.</p>
+        <div class="mount-list" id="mountList">
+          <div class="mount-empty">Discovering mounted filesystems…</div>
+        </div>
+      </section>
+
+      <section class="panel history-panel" id="history">
+        <div class="section-heading history-heading">
+          <div><span class="kicker violet">Resource history</span><h2>How the server has been behaving</h2></div>
+          <div class="history-actions">
+            <div class="range-switch" role="group" aria-label="History time range">
+              <button class="active" type="button" data-history-range="day" aria-pressed="true">24 hours</button>
+              <button type="button" data-history-range="month" aria-pressed="false">30 days</button>
+            </div>
+            <span class="history-coverage" id="historyCoverage">Collecting the first samples…</span>
+          </div>
+        </div>
+        <div class="history-grid">
+          <article class="history-card">
+            <div><span class="history-label lime">CPU</span><strong>Processor usage</strong></div>
+            <canvas id="historyCpuChart" aria-label="Historical CPU usage"></canvas>
+          </article>
+          <article class="history-card">
+            <div><span class="history-label cyan">Memory</span><strong>RAM usage</strong></div>
+            <canvas id="historyMemoryChart" aria-label="Historical memory usage"></canvas>
+          </article>
+          <article class="history-card">
+            <div><span class="history-label amber">Storage</span><strong>Root disk usage</strong></div>
+            <canvas id="historyDiskChart" aria-label="Historical root disk usage"></canvas>
+          </article>
+          <article class="history-card">
+            <div class="network-history-head"><span><span class="history-label cyan">Network</span><strong>Traffic rate</strong></span><small><i class="legend-down"></i>down <i class="legend-up"></i>up</small></div>
+            <canvas id="historyNetworkChart" aria-label="Historical network upload and download rate"></canvas>
+          </article>
+        </div>
       </section>
 
       <section class="lower-grid" id="hardware">

@@ -7,6 +7,8 @@ let pollTimer = null;
 let isPaused = false;
 let inFlight = false;
 let toastTimer = null;
+let historicalMetrics = null;
+let historyRange = 'day';
 
 const byId = (id) => document.getElementById(id);
 const setText = (id, value) => { byId(id).textContent = value; };
@@ -38,7 +40,8 @@ function formatDate(value) {
 
 function statusFor(snapshot) {
   const temperature = snapshot.temperature.celsius;
-  const values = [snapshot.cpu.usage, snapshot.memory.usage, snapshot.disk.usage];
+  const mountUsage = (snapshot.mounts?.length ? snapshot.mounts : [snapshot.disk]).map((mount) => mount.usage);
+  const values = [snapshot.cpu.usage, snapshot.memory.usage, ...mountUsage];
   if (values.some((value) => value >= 95) || (temperature !== null && temperature >= 90)) return ['Needs attention', 'critical'];
   if (values.some((value) => value >= 80) || (temperature !== null && temperature >= 78)) return ['Running warm', 'warning'];
   return ['Everything looks good', ''];
@@ -72,6 +75,77 @@ function updateProcesses(processes) {
     memory.textContent = formatBytes(process.memoryBytes);
     row.append(name, pid, memory);
     return row;
+  }));
+}
+
+function mountStatus(status) {
+  if (status === 'critical') return ['Critical', 'critical'];
+  if (status === 'warning') return ['Watch', 'warning'];
+  return ['Healthy', ''];
+}
+
+function updateMounts(mounts) {
+  const list = byId('mountList');
+  const records = Array.isArray(mounts) ? mounts : [];
+  const critical = records.filter((mount) => mount.status === 'critical').length;
+  const warning = records.filter((mount) => mount.status === 'warning').length;
+
+  if (!records.length) {
+    list.replaceChildren(Object.assign(document.createElement('div'), {
+      className: 'mount-empty',
+      textContent: 'No host filesystems were available to inspect.',
+    }));
+    setText('mountSummary', 'No mounts found');
+    byId('mountSummary').className = 'mount-summary';
+    return;
+  }
+
+  const [summary, summaryClass] = critical
+    ? [`${critical} critical mount${critical === 1 ? '' : 's'}`, 'critical']
+    : warning
+      ? [`${warning} mount${warning === 1 ? '' : 's'} to watch`, 'warning']
+      : [`${records.length} healthy mount${records.length === 1 ? '' : 's'}`, ''];
+  setText('mountSummary', summary);
+  byId('mountSummary').className = `mount-summary ${summaryClass}`.trim();
+
+  list.replaceChildren(...records.map((mount) => {
+    const usage = clamp(mount.usage);
+    const [label, statusClass] = mountStatus(mount.status);
+    const card = document.createElement('article');
+    card.className = `mount-card ${statusClass}`.trim();
+
+    const top = document.createElement('div');
+    top.className = 'mount-card-top';
+    const details = document.createElement('div');
+    const name = document.createElement('h3');
+    name.textContent = mount.mount || mount.path || '/';
+    name.title = name.textContent;
+    const source = document.createElement('p');
+    const parts = [mount.source, mount.filesystem].filter(Boolean);
+    source.textContent = parts.join(' · ') || 'Host filesystem';
+    source.title = source.textContent;
+    details.append(name, source);
+    const state = document.createElement('span');
+    state.className = `mount-state ${statusClass}`.trim();
+    state.textContent = label;
+    top.append(details, state);
+
+    const capacity = document.createElement('div');
+    capacity.className = 'mount-capacity';
+    const available = document.createElement('strong');
+    available.textContent = formatBytes(mount.availableBytes);
+    const used = document.createElement('span');
+    used.textContent = `${Math.round(usage)}% used of ${formatBytes(mount.totalBytes)}`;
+    capacity.append(available, used);
+
+    const meter = document.createElement('div');
+    meter.className = 'mount-meter';
+    meter.setAttribute('aria-label', `${Math.round(usage)}% used`);
+    const fill = document.createElement('i');
+    fill.style.width = `${usage}%`;
+    meter.append(fill);
+    card.append(top, capacity, meter);
+    return card;
   }));
 }
 
@@ -121,6 +195,8 @@ function updateDashboard(snapshot) {
   setText('bootedAt', formatDate(snapshot.system.bootedAt));
   setText('temperature', snapshot.temperature.celsius === null ? 'Not exposed' : `${snapshot.temperature.celsius.toFixed(1)} °C`);
   updateProcesses(snapshot.system);
+  updateMounts(snapshot.mounts?.length ? snapshot.mounts : [snapshot.disk]);
+  updateHistoricalCharts(snapshot.history);
 
   history.push(cpu);
   if (history.length > MAX_HISTORY) history.shift();
@@ -182,6 +258,107 @@ function drawChart() {
   context.shadowBlur = 0;
 }
 
+function prepareCanvas(id) {
+  const canvas = byId(id);
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+  canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, rect.width, rect.height);
+  return { context, width: rect.width, height: rect.height };
+}
+
+function drawHistoryGrid(context, width, height) {
+  context.strokeStyle = 'rgba(255,255,255,0.055)';
+  context.lineWidth = 1;
+  for (let line = 1; line < 4; line += 1) {
+    const y = (height / 4) * line;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(width, y);
+    context.stroke();
+  }
+}
+
+function historyPoints(samples, field, width, height, maximum) {
+  const inset = 4;
+  const count = Math.max(samples.length - 1, 1);
+  return samples.map((sample, index) => ({
+    x: (index / count) * width,
+    y: height - (clamp(Number(sample[field]) / maximum * 100) / 100) * (height - inset * 2) - inset,
+  }));
+}
+
+function drawHistoryLine(context, points, color, height, fill = true) {
+  if (points.length < 2) return;
+  if (fill) {
+    const gradient = context.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, `${color}45`);
+    gradient.addColorStop(1, `${color}00`);
+    context.beginPath();
+    context.moveTo(points[0].x, height);
+    points.forEach((point) => context.lineTo(point.x, point.y));
+    context.lineTo(points.at(-1).x, height);
+    context.closePath();
+    context.fillStyle = gradient;
+    context.fill();
+  }
+
+  context.beginPath();
+  points.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y));
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  context.stroke();
+}
+
+function drawUsageHistory(canvasId, samples, field, color) {
+  const { context, width, height } = prepareCanvas(canvasId);
+  drawHistoryGrid(context, width, height);
+  drawHistoryLine(context, historyPoints(samples, field, width, height, 100), color, height);
+}
+
+function drawNetworkHistory(samples) {
+  const { context, width, height } = prepareCanvas('historyNetworkChart');
+  drawHistoryGrid(context, width, height);
+  const peak = Math.max(1, ...samples.flatMap((sample) => [
+    Number(sample.rxBytesPerSecond) || 0,
+    Number(sample.txBytesPerSecond) || 0,
+  ]));
+  drawHistoryLine(context, historyPoints(samples, 'rxBytesPerSecond', width, height, peak), '#70e9eb', height, false);
+  drawHistoryLine(context, historyPoints(samples, 'txBytesPerSecond', width, height, peak), '#c3a8ff', height, false);
+}
+
+function updateHistoricalCharts(nextHistory) {
+  if (nextHistory) historicalMetrics = nextHistory;
+  const historyData = historicalMetrics || {};
+  const samples = historyRange === 'month' ? historyData.last30Days || [] : historyData.last24Hours || [];
+  const coverage = byId('historyCoverage');
+  if (!historyData.recordingSince) {
+    coverage.textContent = 'Collecting the first sample…';
+  } else {
+    const persistence = historyData.persistent ? 'saved on this server' : 'in memory only';
+    coverage.textContent = `Since ${formatDate(historyData.recordingSince)} · ${persistence}`;
+  }
+  drawUsageHistory('historyCpuChart', samples, 'cpuUsage', '#baf86b');
+  drawUsageHistory('historyMemoryChart', samples, 'memoryUsage', '#70e9eb');
+  drawUsageHistory('historyDiskChart', samples, 'diskUsage', '#ffbd63');
+  drawNetworkHistory(samples);
+}
+
+function selectHistoryRange(range) {
+  historyRange = range;
+  document.querySelectorAll('[data-history-range]').forEach((button) => {
+    const selected = button.dataset.historyRange === range;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  updateHistoricalCharts();
+}
+
 function showError(message) {
   const toast = byId('toast');
   toast.textContent = message;
@@ -224,7 +401,13 @@ function togglePolling() {
 
 byId('refreshButton').addEventListener('click', refresh);
 byId('pollButton').addEventListener('click', togglePolling);
-window.addEventListener('resize', drawChart);
+document.querySelectorAll('[data-history-range]').forEach((button) => {
+  button.addEventListener('click', () => selectHistoryRange(button.dataset.historyRange));
+});
+window.addEventListener('resize', () => {
+  drawChart();
+  updateHistoricalCharts();
+});
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && !isPaused) refresh();
 });

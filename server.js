@@ -11,6 +11,11 @@ const HOST_PROC = process.env.HOST_PROC || '/proc';
 const HOST_SYS = process.env.HOST_SYS || '/sys';
 const HOST_ETC = process.env.HOST_ETC || '/etc';
 const HOST_ROOT = process.env.HOST_ROOT || path.parse(process.cwd()).root;
+const DATA_DIR = process.env.DATA_DIR || '';
+const HISTORY_FILE = DATA_DIR ? path.join(DATA_DIR, 'metrics-history.ndjson') : '';
+const HISTORY_SAMPLE_INTERVAL_MS = 60 * 1000;
+const HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const HISTORY_MAX_POINTS = 360;
 const WEB_ROOT = path.join(__dirname, 'web');
 const STARTED_AT = Date.now();
 
@@ -138,25 +143,189 @@ function networkWithRate(current, now) {
   return result;
 }
 
-function diskStats() {
+function storageLevel(usage) {
+  if (usage >= 95) return 'critical';
+  if (usage >= 80) return 'warning';
+  return 'normal';
+}
+
+function filesystemStats(targetPath, details = {}) {
   try {
-    const stats = fs.statfsSync(HOST_ROOT, { bigint: true });
+    const stats = fs.statfsSync(targetPath, { bigint: true });
     const blockSize = stats.bsize;
     const total = stats.blocks * blockSize;
     const available = stats.bavail * blockSize;
     const free = stats.bfree * blockSize;
     const used = total - free;
+    const usage = total ? Number((used * 10000n) / total) / 100 : 0;
     return {
+      ...details,
       totalBytes: Number(total),
       availableBytes: Number(available),
       usedBytes: Number(used),
-      usage: total ? Number((used * 10000n) / total) / 100 : 0,
-      path: '/',
+      usage,
+      status: storageLevel(usage),
     };
   } catch {
-    return { totalBytes: 0, availableBytes: 0, usedBytes: 0, usage: 0, path: '/' };
+    return null;
   }
 }
+
+function diskStats() {
+  return filesystemStats(HOST_ROOT, { path: '/', mount: '/', source: 'Host root', filesystem: '' })
+    || { path: '/', mount: '/', source: 'Host root', filesystem: '', totalBytes: 0, availableBytes: 0, usedBytes: 0, usage: 0, status: 'normal' };
+}
+
+function decodeMountField(value) {
+  return String(value || '').replace(/\\([0-7]{3})/g, (_match, octal) => String.fromCharCode(Number.parseInt(octal, 8)));
+}
+
+function parseMountTable(text) {
+  const excludedFilesystems = new Set([
+    'autofs', 'bpf', 'cgroup', 'cgroup2', 'configfs', 'debugfs', 'devpts', 'devtmpfs', 'efivarfs', 'fusectl',
+    'hugetlbfs', 'mqueue', 'nsfs', 'overlay', 'proc', 'pstore', 'ramfs', 'rpc_pipefs', 'securityfs', 'sysfs',
+    'tmpfs', 'tracefs',
+  ]);
+  const mounts = new Map();
+
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const [rawSource, rawMount, filesystem] = line.trim().split(/\s+/);
+    if (!rawSource || !rawMount || !filesystem || excludedFilesystems.has(filesystem)) continue;
+    const mount = path.posix.normalize(decodeMountField(rawMount));
+    if (!mount.startsWith('/') || (mount !== '/' && /^(\/proc|\/sys|\/dev)(\/|$)/.test(mount))) continue;
+    if (!mounts.has(mount)) {
+      mounts.set(mount, { mount, source: decodeMountField(rawSource), filesystem });
+    }
+  }
+
+  return [...mounts.values()].sort((a, b) => a.mount === '/' ? -1 : b.mount === '/' ? 1 : a.mount.localeCompare(b.mount));
+}
+
+function hostPathForMount(mount) {
+  const root = path.resolve(HOST_ROOT);
+  const target = path.resolve(root, `.${mount}`);
+  return target === root || target.startsWith(`${root}${path.sep}`) ? target : null;
+}
+
+function mountedFilesystems() {
+  const mounts = parseMountTable(readText(path.join(HOST_PROC, 'mounts')));
+  const records = mounts
+    .map((mount) => {
+      const target = hostPathForMount(mount.mount);
+      return target ? filesystemStats(target, { path: mount.mount, ...mount }) : null;
+    })
+    .filter(Boolean);
+
+  if (!records.some((mount) => mount.mount === '/')) records.unshift(diskStats());
+  return records;
+}
+
+function compactHistory(samples, maximumPoints = HISTORY_MAX_POINTS) {
+  if (samples.length <= maximumPoints) return samples;
+  const bucketSize = Math.ceil(samples.length / maximumPoints);
+  const fields = ['cpuUsage', 'memoryUsage', 'diskUsage', 'rxBytesPerSecond', 'txBytesPerSecond'];
+  const compacted = [];
+
+  for (let index = 0; index < samples.length; index += bucketSize) {
+    const bucket = samples.slice(index, index + bucketSize);
+    const result = { timestamp: bucket.at(-1).timestamp };
+    for (const field of fields) {
+      result[field] = bucket.reduce((sum, sample) => sum + (Number(sample[field]) || 0), 0) / bucket.length;
+    }
+    compacted.push(result);
+  }
+  return compacted;
+}
+
+class HistoryStore {
+  constructor(filePath) {
+    this.filePath = filePath;
+    this.samples = [];
+    this.persistenceError = false;
+    this.lastCompactionAt = 0;
+    this.load();
+  }
+
+  load() {
+    if (!this.filePath) return;
+    try {
+      const entries = fs.readFileSync(this.filePath, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((sample) => Number.isFinite(Date.parse(sample.timestamp)));
+      this.samples = entries.filter((sample) => Date.parse(sample.timestamp) >= Date.now() - HISTORY_RETENTION_MS);
+    } catch (error) {
+      if (error.code !== 'ENOENT') this.persistenceError = true;
+    }
+  }
+
+  toSample(snapshot) {
+    return {
+      timestamp: snapshot.timestamp,
+      cpuUsage: Math.round(snapshot.cpu.usage * 100) / 100,
+      memoryUsage: Math.round(snapshot.memory.usage * 100) / 100,
+      diskUsage: Math.round(snapshot.disk.usage * 100) / 100,
+      rxBytesPerSecond: Math.round(snapshot.network.rxBytesPerSecond || 0),
+      txBytesPerSecond: Math.round(snapshot.network.txBytesPerSecond || 0),
+    };
+  }
+
+  record(snapshot, now = Date.now()) {
+    const sample = this.toSample(snapshot);
+    const timestamp = Date.parse(sample.timestamp) || now;
+    const previous = this.samples.at(-1);
+    if (previous && timestamp - Date.parse(previous.timestamp) < HISTORY_SAMPLE_INTERVAL_MS * 0.8) return false;
+
+    this.samples.push(sample);
+    const removed = this.prune(now);
+    this.persist(sample, removed, now);
+    return true;
+  }
+
+  prune(now = Date.now()) {
+    const earliest = now - HISTORY_RETENTION_MS;
+    const firstCurrent = this.samples.findIndex((sample) => Date.parse(sample.timestamp) >= earliest);
+    if (firstCurrent === 0) return false;
+    if (firstCurrent < 0) {
+      this.samples = [];
+      return true;
+    }
+    this.samples.splice(0, firstCurrent);
+    return true;
+  }
+
+  persist(sample, compacted, now) {
+    if (!this.filePath || this.persistenceError) return;
+    try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      if (compacted && now - this.lastCompactionAt > 6 * 60 * 60 * 1000) {
+        fs.writeFileSync(this.filePath, `${this.samples.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+        this.lastCompactionAt = now;
+      } else {
+        fs.appendFileSync(this.filePath, `${JSON.stringify(sample)}\n`, 'utf8');
+      }
+    } catch {
+      this.persistenceError = true;
+    }
+  }
+
+  series(durationMs, now = Date.now()) {
+    return compactHistory(this.samples.filter((sample) => Date.parse(sample.timestamp) >= now - durationMs));
+  }
+
+  summary(now = Date.now()) {
+    return {
+      last24Hours: this.series(24 * 60 * 60 * 1000, now),
+      last30Days: this.series(HISTORY_RETENTION_MS, now),
+      recordingSince: this.samples[0]?.timestamp || null,
+      persistent: Boolean(this.filePath) && !this.persistenceError,
+      retentionDays: 30,
+    };
+  }
+}
+
+const historyStore = new HistoryStore(HISTORY_FILE);
 
 function thermalStats() {
   const thermalRoot = path.join(HOST_SYS, 'class', 'thermal');
@@ -230,7 +399,7 @@ function loadAverage() {
   return os.loadavg();
 }
 
-function collectSnapshot() {
+function collectSnapshot(includeHistory = true) {
   const now = Date.now();
   const rawCpu = parseCpuTimes(readText(path.join(HOST_PROC, 'stat'))) || fallbackCpuTimes();
   const usage = cpuUsage(rawCpu, previousCpu);
@@ -247,6 +416,7 @@ function collectSnapshot() {
   const loads = loadAverage();
   const hostName = readText(path.join(HOST_ETC, 'hostname')) || os.hostname();
   const kernel = readText(path.join(HOST_PROC, 'sys', 'kernel', 'osrelease')) || os.release();
+  const mounts = mountedFilesystems();
 
   return {
     timestamp: new Date(now).toISOString(),
@@ -263,6 +433,7 @@ function collectSnapshot() {
     cpu: { usage, load1: loads[0] || 0, load5: loads[1] || 0, load15: loads[2] || 0 },
     memory,
     disk: diskStats(),
+    mounts,
     network,
     temperature: thermalStats(),
     system: {
@@ -272,7 +443,16 @@ function collectSnapshot() {
       topProcesses: processes.top,
       monitorUptimeSeconds: Math.floor((now - STARTED_AT) / 1000),
     },
+    ...(includeHistory ? { history: historyStore.summary(now) } : {}),
   };
+}
+
+function recordHistorySample() {
+  try {
+    historyStore.record(collectSnapshot(false));
+  } catch (error) {
+    console.error('Unable to record metrics history:', error);
+  }
 }
 
 function secureEqual(actual, expected) {
@@ -358,6 +538,8 @@ function requestHandler(request, response) {
 
 function startServer() {
   const server = http.createServer(requestHandler);
+  recordHistorySample();
+  const historyTimer = setInterval(recordHistorySample, HISTORY_SAMPLE_INTERVAL_MS);
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Nodelight is listening on port ${PORT}`);
     if (!process.env.DASHBOARD_PASSWORD) {
@@ -365,7 +547,10 @@ function startServer() {
     }
   });
 
-  const shutdown = () => server.close(() => process.exit(0));
+  const shutdown = () => {
+    clearInterval(historyTimer);
+    server.close(() => process.exit(0));
+  };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
   return server;
@@ -376,8 +561,10 @@ if (require.main === module) startServer();
 module.exports = {
   collectSnapshot,
   cpuUsage,
+  HistoryStore,
   parseCpuTimes,
   parseMemInfo,
+  parseMountTable,
   parseNetwork,
   requestHandler,
   startServer,

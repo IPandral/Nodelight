@@ -45,11 +45,13 @@ services:
       HOST_SYS: /host/sys
       HOST_ETC: /host/etc
       HOST_ROOT: /host/root
+      DATA_DIR: /data
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
       - /:/host/root:ro
+      - nodelight-data:/data
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -60,6 +62,9 @@ services:
     pids_limit: 100
     mem_limit: 128m
     cpus: 0.50
+
+volumes:
+  nodelight-data:
 ```
 
 Pull the image and start the dashboard:
@@ -70,6 +75,12 @@ docker compose up -d
 ```
 
 Open `http://YOUR_SERVER_IP:8080` and sign in with the credentials in the Compose file. Replace the example password before starting the container.
+
+## Storage and history
+
+Nodelight lists every non-virtual filesystem the host exposes, not only `/`. A drive becomes a **Watch** warning at 80% full and **Critical** at 95% full.
+
+It records CPU, RAM, root-disk, download, and upload metrics once a minute. The named `nodelight-data` Docker volume keeps that history through container recreation and stores up to 30 days. The dashboard can switch between the last 24 hours and the full 30-day view. A new install starts collecting immediately, so the charts fill in over time. `docker compose down -v` intentionally removes this history volume.
 
 ## Start it on Ubuntu
 
@@ -128,6 +139,7 @@ Edit `.env` before running Docker Compose.
 | `DASHBOARD_PASSWORD` | none | Browser sign-in password; set this before exposing the port |
 | `DASHBOARD_PORT` | `8080` | Port used to reach the dashboard |
 | `TZ` | `UTC` | Time zone used by the container, such as `Australia/Perth` |
+| `DATA_DIR` | `/data` | Internal path for persistent metric history; keep this at `/data` with the named volume mounted |
 | `NODELIGHT_IMAGE` | not set | Published image to pull with `docker-compose.release.yml`, for example `ghcr.io/OWNER/REPOSITORY:v1.0.0` |
 
 ## What it reads

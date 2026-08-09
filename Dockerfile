@@ -11,15 +11,19 @@ COPY --chown=node:node tests ./tests
 
 RUN node --test tests/*.test.js
 
+RUN mkdir /data && chown node:node /data
+
 ENV NODE_ENV=production \
     PORT=8080 \
     HOST_PROC=/host/proc \
     HOST_SYS=/host/sys \
     HOST_ETC=/host/etc \
-    HOST_ROOT=/host/root
+    HOST_ROOT=/host/root \
+    DATA_DIR=/data
 
 USER node
 EXPOSE 8080
+VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]

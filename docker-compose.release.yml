@@ -17,11 +17,13 @@ services:
       HOST_SYS: /host/sys
       HOST_ETC: /host/etc
       HOST_ROOT: /host/root
+      DATA_DIR: /data
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
       - /:/host/root:ro
+      - nodelight-data:/data
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
@@ -32,3 +34,6 @@ services:
     pids_limit: 100
     mem_limit: 128m
     cpus: 0.50
+
+volumes:
+  nodelight-data:
