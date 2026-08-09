@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0a0e10">
+    <meta name="description" content="Live health and resource monitoring for your Ubuntu server.">
+    <title>Nodelight · Server dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#overview" aria-label="Nodelight dashboard home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>NODELIGHT</span>
+      </a>
+
+      <nav class="nav" aria-label="Dashboard sections">
+        <a class="active" href="#overview">Overview</a>
+        <a href="#hardware">Hardware</a>
+        <a href="#processes">Processes</a>
+      </nav>
+
+      <div class="top-actions">
+        <button class="poll-button" id="pollButton" type="button" aria-pressed="false">
+          <span class="live-dot"></span>
+          <span id="pollLabel">Live · 3s</span>
+        </button>
+        <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh server metrics" title="Refresh now">↻</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="overview">
+        <div class="hero-copy">
+          <div class="eyebrow"><span id="heroStatusDot"></span><span id="serverIdentity">Connecting to server</span></div>
+          <h1>Your server,<br><em>at a glance.</em></h1>
+          <p>Live resource health and the details that matter—without digging through a terminal.</p>
+        </div>
+
+        <div class="hero-health">
+          <div class="health-label">Overall health</div>
+          <div class="health-state" id="healthState">Checking…</div>
+          <div class="health-meta">
+            <div><span>Uptime</span><strong id="heroUptime">—</strong></div>
+            <div><span>Last update</span><strong id="lastUpdated">—</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Live resource metrics">
+        <article class="metric-card cpu-card">
+          <div class="card-heading">
+            <div><span class="kicker lime">Processor</span><h2>CPU load</h2></div>
+            <span class="micro-status" id="cpuStatus">Normal</span>
+          </div>
+          <div class="cpu-layout">
+            <div class="ring" id="cpuRing" style="--value: 0">
+              <div><strong id="cpuValue">0</strong><span>%</span></div>
+            </div>
+            <div class="cpu-details">
+              <p id="cpuModel">Reading processor…</p>
+              <div class="split-stat"><span>Load (1 min)</span><strong id="loadOne">—</strong></div>
+              <div class="split-stat"><span>Logical cores</span><strong id="cpuCores">—</strong></div>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-head"><span>Last two minutes</span><span id="cpuPeak">Peak —</span></div>
+            <canvas id="cpuChart" aria-label="CPU usage over the last two minutes"></canvas>
+          </div>
+        </article>
+
+        <article class="metric-card memory-card">
+          <div class="card-heading">
+            <div><span class="kicker cyan">Memory</span><h2>RAM</h2></div>
+            <strong class="metric-number"><span id="memoryValue">0</span>%</strong>
+          </div>
+          <div class="bar-track"><i id="memoryBar"></i></div>
+          <p class="usage-copy"><strong id="memoryUsed">—</strong> used of <span id="memoryTotal">—</span></p>
+          <div class="small-grid">
+            <div><span>Available</span><strong id="memoryAvailable">—</strong></div>
+            <div><span>Swap used</span><strong id="swapUsed">—</strong></div>
+          </div>
+        </article>
+
+        <article class="metric-card storage-card">
+          <div class="card-heading">
+            <div><span class="kicker amber">Storage</span><h2>Root disk</h2></div>
+            <strong class="metric-number"><span id="diskValue">0</span>%</strong>
+          </div>
+          <div class="bar-track amber-bar"><i id="diskBar"></i></div>
+          <p class="usage-copy"><strong id="diskUsed">—</strong> used of <span id="diskTotal">—</span></p>
+          <div class="small-grid">
+            <div><span>Free to use</span><strong id="diskAvailable">—</strong></div>
+            <div><span>Mount</span><strong>/</strong></div>
+          </div>
+        </article>
+
+        <article class="metric-card network-card">
+          <div class="card-heading">
+            <div><span class="kicker violet">Network</span><h2>Traffic</h2></div>
+            <span class="micro-status">Live rate</span>
+          </div>
+          <div class="network-rates">
+            <div><span class="arrow down">↓</span><p>Download</p><strong id="networkDown">—</strong></div>
+            <div><span class="arrow up">↑</span><p>Upload</p><strong id="networkUp">—</strong></div>
+          </div>
+          <div class="network-total"><span>All-time since boot</span><strong id="networkTotal">—</strong></div>
+        </article>
+      </section>
+
+      <section class="lower-grid" id="hardware">
+        <article class="panel system-panel">
+          <div class="section-heading">
+            <div><span class="kicker lime">Machine</span><h2>System profile</h2></div>
+            <span class="os-badge">Ubuntu host</span>
+          </div>
+          <dl class="system-list">
+            <div><dt>Hostname</dt><dd id="hostname">—</dd></div>
+            <div><dt>Operating system</dt><dd id="operatingSystem">—</dd></div>
+            <div><dt>Kernel</dt><dd id="kernel">—</dd></div>
+            <div><dt>Architecture</dt><dd id="architecture">—</dd></div>
+            <div><dt>Booted</dt><dd id="bootedAt">—</dd></div>
+            <div><dt>Temperature</dt><dd id="temperature">—</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel process-panel" id="processes">
+          <div class="section-heading">
+            <div><span class="kicker cyan">Workload</span><h2>Top memory users</h2></div>
+            <span class="process-count"><strong id="processCount">—</strong> processes</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Process</th><th>PID</th><th>Memory</th></tr></thead>
+              <tbody id="processTable"><tr><td colspan="3" class="empty-row">Reading processes…</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <footer>
+        <span><i class="live-dot"></i>Nodelight monitor online</span>
+        <span id="footerMessage">Waiting for the first reading</span>
+      </footer>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

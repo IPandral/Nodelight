@@ -1,0 +1,34 @@
+# Run a published image from GitHub Container Registry. Set NODELIGHT_IMAGE in
+# .env first, for example: ghcr.io/OWNER/REPOSITORY:v1.0.0
+services:
+  nodelight:
+    image: ${NODELIGHT_IMAGE:?Set NODELIGHT_IMAGE in .env to a published GHCR image}
+    container_name: nodelight
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      DASHBOARD_NAME: "${DASHBOARD_NAME:-Home Server}"
+      DASHBOARD_USERNAME: "${DASHBOARD_USERNAME:-admin}"
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD:-}"
+      TZ: "${TZ:-UTC}"
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ETC: /host/etc
+      HOST_ROOT: /host/root
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc:/host/etc:ro
+      - /:/host/root:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 128m
+    cpus: 0.50
