@@ -112,21 +112,24 @@ Open `http://localhost:8080`. When host Linux files are unavailable, development
 
 ## Publishing a release
 
-The [publish-image workflow](.github/workflows/publish-image.yml) does the whole release process from one version tag: it builds the image, publishes it to GitHub Container Registry, creates the GitHub Release with generated notes, and attaches the build attestation. Once the intended commit is on `main`, create and push a semantic version tag:
+The [publish-image workflow](.github/workflows/publish-image.yml) automatically builds and publishes a new multi-architecture `:latest` image whenever a change reaches `main`. It uses the same proven pattern as the RustyDB project: build, test, publish, then retain a commit-specific image tag.
+
+To create a versioned GitHub Release as well, create a semantic version tag from the current `main` commit and push it:
 
 ```bash
 git tag -a v1.0.0 -m "v1.0.0"
 git push origin v1.0.0
 ```
 
-The workflow publishes these tags to GitHub Container Registry:
+The workflow publishes these images to GitHub Container Registry:
 
 | Release | Published image tags |
 | --- | --- |
-| `v1.2.3` | `v1.2.3`, `1.2.3`, `1.2`, `1`, `latest` |
+| Push to `main` | `latest`, `main`, and a commit-specific `sha-â€¦` tag |
+| `v1.2.3` tag | `v1.2.3`, `1.2.3`, `1.2`, and `1`, plus a GitHub Release |
 | `v1.2.3-rc.1` | `v1.2.3-rc.1`, `1.2.3-rc.1` (never `latest`) |
 
-Images include an SBOM and build provenance attestation. A release is created only after the image build, publication, and attestation succeed, so users never see a release pointing to a failed container build.
+Images include an SBOM and build provenance attestation. A GitHub Release is created only after the versioned image build, publication, and attestation succeed, so users never see a release pointing to a failed container build.
 
 If the first publishing run is denied, check the repository's **Settings â†’ Actions â†’ General â†’ Workflow permissions** and allow workflows to read and write packages. Organizations can also restrict package publishing centrally.
 
