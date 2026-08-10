@@ -18,7 +18,7 @@ Once this repository has a GitHub Release, GitHub Actions automatically publishe
 2. Set your server name and a strong password in `.env`, then add the published image:
 
    ```dotenv
-   NODELIGHT_IMAGE=ghcr.io/ipandral/computer-usage-dashboard:latest
+   NODELIGHT_IMAGE=ghcr.io/ipandral/nodelight:latest
    ```
 
 3. Pull and run it:
@@ -37,7 +37,7 @@ To run the latest published image without cloning this repository, create a `com
 ```yaml
 services:
   nodelight:
-    image: ghcr.io/ipandral/computer-usage-dashboard:latest
+    image: ghcr.io/ipandral/nodelight:latest
     container_name: nodelight
     restart: unless-stopped
     ports:
@@ -60,7 +60,7 @@ services:
       ALERT_WEBHOOK_URL: ""
       ALERT_WEBHOOK_TYPE: generic
       ALERT_COOLDOWN_MINUTES: "30"
-      GITHUB_REPOSITORY: IPandral/Computer-usage-dashboard
+      GITHUB_REPOSITORY: IPandral/Nodelight
       DEMO_MODE: "false"
     volumes:
       - /proc:/host/proc:ro
@@ -87,7 +87,7 @@ volumes:
 Pull the image and start the dashboard:
 
 ```bash
-docker pull ghcr.io/ipandral/computer-usage-dashboard:latest
+docker pull ghcr.io/ipandral/nodelight:latest
 docker compose up -d
 ```
 
@@ -121,7 +121,7 @@ ALERT_COOLDOWN_MINUTES=30
 
 Choose `generic`, `discord`, or `slack` for `ALERT_WEBHOOK_TYPE`. Generic receivers get a JSON `nodelight.alert` event; Discord and Slack receive their native text-message shape. An empty URL disables outbound alerts. The cooldown prevents a continuing fault from generating a message every polling cycle. Use `DEMO_MODE=true` before a public demonstration or screenshot; it hides identifying details such as the hostname, IP addresses, serial numbers, mount paths, and process names. Demo mode is a display/privacy feature, not an authentication boundary.
 
-`GITHUB_REPOSITORY=IPandral/Computer-usage-dashboard` selects the repository used by the version panel. Published images embed their source tag or branch and commit SHA, while locally built images use `APP_VERSION` from `.env`.
+`GITHUB_REPOSITORY=IPandral/Nodelight` selects the repository used by the version panel. Published images embed their source tag or branch and commit SHA, while locally built images use `APP_VERSION` from `.env`.
 
 ## SMART health for every physical disk
 
