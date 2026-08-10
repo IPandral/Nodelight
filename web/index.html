@@ -6,6 +6,10 @@
     <meta name="theme-color" content="#0a0e10">
     <meta name="description" content="Live health and resource monitoring for your Ubuntu server.">
     <title>Nodelight · Server dashboard</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
   </head>
@@ -15,19 +19,22 @@
 
     <header class="topbar">
       <a class="brand" href="#overview" aria-label="Nodelight dashboard home">
-        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <img class="brand-logo" src="/assets/nodelight-logo.png" alt="" width="30" height="30">
         <span>NODELIGHT</span>
       </a>
 
       <nav class="nav" aria-label="Dashboard sections">
         <a class="active" href="#overview">Overview</a>
         <a href="#storage">Storage</a>
+        <a href="#physical-disks">Disks</a>
         <a href="#history">History</a>
-        <a href="#hardware">Hardware</a>
+        <a href="#services">Services</a>
+        <a href="#activity">Activity</a>
         <a href="#processes">Processes</a>
       </nav>
 
       <div class="top-actions">
+        <span class="privacy-badge" id="privacyBadge" hidden>Demo · redacted</span>
         <button class="poll-button" id="pollButton" type="button" aria-pressed="false">
           <span class="live-dot"></span>
           <span id="pollLabel">Live · 3s</span>
@@ -126,6 +133,57 @@
         </div>
       </section>
 
+      <section class="panel disks-panel" id="physical-disks">
+        <div class="section-heading disk-section-heading">
+          <div><span class="kicker amber">Physical media</span><h2>Connected disks &amp; SMART health</h2></div>
+          <span class="mount-summary" id="diskSummary">Discovering disks…</span>
+        </div>
+        <p class="section-copy">Each physical drive is tracked independently, including unmounted disks. Live I/O and SMART counters make developing hardware trouble easier to spot.</p>
+        <div class="disk-list" id="physicalDiskList">
+          <div class="mount-empty">Reading connected block devices and SMART data…</div>
+        </div>
+
+        <div class="smart-schedule-shell">
+          <div class="schedule-intro">
+            <div><span class="kicker violet">Preventive checks</span><h3>SMART self-test schedule</h3></div>
+            <span class="schedule-timezone" id="scheduleTimezone">Server time</span>
+          </div>
+          <p class="schedule-caution">Extended tests can take many hours on large HDDs such as a 10&nbsp;TB Exos. Keep the server powered on and avoid heavy disk activity while a test is running.</p>
+          <form id="smartScheduleForm">
+            <div class="schedule-grid">
+              <fieldset class="schedule-card">
+                <legend>Short test</legend>
+                <label class="check-row" for="shortScheduleEnabled">
+                  <input id="shortScheduleEnabled" type="checkbox">
+                  <span><strong>Run automatically</strong><small>A quick electronics and surface check.</small></span>
+                </label>
+                <div class="schedule-fields">
+                  <label><span>Frequency</span><select id="shortScheduleFrequency"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+                  <label id="shortScheduleDayLabel"><span>Day</span><select id="shortScheduleDay"><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select></label>
+                  <label><span>Start time</span><input id="shortScheduleTime" type="time" value="02:00" required></label>
+                </div>
+              </fieldset>
+
+              <fieldset class="schedule-card">
+                <legend>Extended test</legend>
+                <label class="check-row" for="longScheduleEnabled">
+                  <input id="longScheduleEnabled" type="checkbox">
+                  <span><strong>Run automatically</strong><small>A full media scan, scheduled monthly.</small></span>
+                </label>
+                <div class="schedule-fields long-fields">
+                  <label><span>Day of month</span><input id="longScheduleDay" type="number" min="1" max="28" value="1" required></label>
+                  <label><span>Start time</span><input id="longScheduleTime" type="time" value="03:00" required></label>
+                </div>
+              </fieldset>
+            </div>
+            <div class="schedule-footer">
+              <span id="scheduleMessage" role="status" aria-live="polite">Waiting for SMART availability…</span>
+              <button class="primary-button" id="smartScheduleSave" type="submit">Save schedule</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
       <section class="panel history-panel" id="history">
         <div class="section-heading history-heading">
           <div><span class="kicker violet">Resource history</span><h2>How the server has been behaving</h2></div>
@@ -155,6 +213,58 @@
             <canvas id="historyNetworkChart" aria-label="Historical network upload and download rate"></canvas>
           </article>
         </div>
+      </section>
+
+      <section class="operations-grid" id="services">
+        <article class="panel service-panel">
+          <div class="section-heading">
+            <div><span class="kicker lime">Availability</span><h2>Service health</h2></div>
+            <span class="mount-summary" id="serviceSummary">Checking services…</span>
+          </div>
+          <p class="section-copy">Configured system services, containers, and network checks are measured from this host.</p>
+          <div class="service-list" id="serviceList">
+            <div class="mount-empty">Waiting for service checks…</div>
+          </div>
+        </article>
+
+        <article class="panel interface-panel">
+          <div class="section-heading">
+            <div><span class="kicker cyan">Connectivity</span><h2>Network interfaces</h2></div>
+            <span class="mount-summary" id="interfaceSummary">Reading links…</span>
+          </div>
+          <p class="section-copy">Traffic, packet counts, drops, and errors for every active host interface.</p>
+          <div class="network-host-overview">
+            <div><span>Host addresses</span><strong id="networkAddresses">Reading addresses...</strong></div>
+            <div><span>TCP connections</span><strong id="networkConnections">Reading sockets...</strong></div>
+          </div>
+          <div class="interface-list" id="interfaceList">
+            <div class="mount-empty">Waiting for network counters…</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="activity-grid" id="activity">
+        <article class="panel event-panel">
+          <div class="section-heading">
+            <div><span class="kicker violet">Activity</span><h2>Recent events</h2></div>
+            <span class="alert-summary" id="alertSummary">No active alerts</span>
+          </div>
+          <div class="notification-state" id="notificationState">Checking notification delivery…</div>
+          <ol class="event-list" id="eventList">
+            <li class="mount-empty">Waiting for system and alert events…</li>
+          </ol>
+        </article>
+
+        <aside class="panel version-panel" aria-labelledby="versionHeading">
+          <span class="kicker lime">Software</span>
+          <div class="version-title-row"><h2 id="versionHeading">Nodelight version</h2><span class="update-badge" id="updateBadge">Checking</span></div>
+          <dl class="version-list">
+            <div><dt>Installed</dt><dd id="currentVersion">—</dd></div>
+            <div><dt>Latest</dt><dd id="latestVersion">—</dd></div>
+            <div><dt>Last checked</dt><dd id="versionCheckedAt">—</dd></div>
+          </dl>
+          <a class="release-link" id="releaseLink" href="#" target="_blank" rel="noopener noreferrer" hidden>View latest release <span aria-hidden="true">↗</span></a>
+        </aside>
       </section>
 
       <section class="lower-grid" id="hardware">

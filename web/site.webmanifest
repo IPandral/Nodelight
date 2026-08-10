@@ -1,0 +1,21 @@
+{
+  "name": "Nodelight Server Dashboard",
+  "short_name": "Nodelight",
+  "description": "Live health and resource monitoring for an Ubuntu server.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e10",
+  "theme_color": "#0a0e10",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

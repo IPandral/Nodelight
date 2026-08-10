@@ -1,10 +1,15 @@
 services:
   nodelight:
-    build: .
+    build:
+      context: .
+      args:
+        APP_VERSION: "${APP_VERSION:-development}"
     container_name: nodelight
     restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PORT: "8080"
       DASHBOARD_NAME: "${DASHBOARD_NAME:-Home Server}"
@@ -15,12 +20,23 @@ services:
       HOST_SYS: /host/sys
       HOST_ETC: /host/etc
       HOST_ROOT: /host/root
+      HOST_VAR_LOG: /host/var/log
       DATA_DIR: /data
+      SMART_ENABLED: "${SMART_ENABLED:-false}"
+      SMARTCTL_PATH: "${SMARTCTL_PATH:-smartctl}"
+      SMART_DEVICE_ROOT: "${SMART_DEVICE_ROOT:-/host/dev}"
+      SERVICE_CHECKS: "${SERVICE_CHECKS:-}"
+      ALERT_WEBHOOK_URL: "${ALERT_WEBHOOK_URL:-}"
+      ALERT_WEBHOOK_TYPE: "${ALERT_WEBHOOK_TYPE:-generic}"
+      ALERT_COOLDOWN_MINUTES: "${ALERT_COOLDOWN_MINUTES:-30}"
+      GITHUB_REPOSITORY: "${GITHUB_REPOSITORY:-IPandral/Computer-usage-dashboard}"
+      DEMO_MODE: "${DEMO_MODE:-false}"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
       - /:/host/root:ro
+      - /var/log:/host/var/log:ro
       - nodelight-data:/data
     read_only: true
     tmpfs:
