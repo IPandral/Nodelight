@@ -8,11 +8,16 @@ services:
     environment:
       SMART_ENABLED: "true"
       SMARTCTL_PATH: smartctl
-      SMART_DEVICE_ROOT: /host/dev
+      # Keep canonical /dev paths so smartctl can auto-detect SATA and NVMe.
+      SMART_DEVICE_ROOT: /dev
     cap_add:
       - SYS_RAWIO
+      # Required by Linux for NVMe administrative commands such as self-tests.
+      - SYS_ADMIN
+      # Root still needs to write settings after the base file drops all caps.
+      - DAC_OVERRIDE
     devices:
-      - /dev/sda:/host/dev/sda:rwm
-      - /dev/sdb:/host/dev/sdb:rwm
+      - /dev/sda:/dev/sda:rwm
+      - /dev/sdb:/dev/sdb:rwm
       # Add NVMe or further disks in the same form, for example:
-      # - /dev/nvme0n1:/host/dev/nvme0n1:rwm
+      # - /dev/nvme0n1:/dev/nvme0n1:rwm
