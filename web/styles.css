@@ -13,6 +13,7 @@
   --violet: #c3a8ff;
   --danger: #ff6b6b;
   --radius: 22px;
+  --content-max: 2400px;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -58,7 +59,7 @@ a { color: inherit; }
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   min-height: 72px;
-  padding: 0 clamp(20px, 4vw, 64px);
+  padding: 0 max(clamp(20px, 4vw, 64px), calc((100vw - var(--content-max)) / 2 + 64px));
   border-bottom: 1px solid var(--line);
   background: rgba(8, 11, 12, 0.82);
   backdrop-filter: blur(22px);
@@ -102,7 +103,7 @@ a { color: inherit; }
 .poll-button[aria-pressed="true"] .live-dot { background: var(--amber); box-shadow: none; }
 .privacy-badge { align-self: center; padding: 6px 9px; border: 1px solid rgba(195,168,255,0.25); border-radius: 8px; background: rgba(195,168,255,0.08); color: var(--violet); font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 
-main { width: min(1440px, 100%); margin: 0 auto; padding: 0 clamp(20px, 4vw, 64px) 32px; }
+main { width: min(var(--content-max), 100%); margin: 0 auto; padding: 0 clamp(20px, 4vw, 64px) 32px; }
 
 .hero {
   display: grid;
@@ -379,6 +380,37 @@ footer > span:first-child { display: flex; align-items: center; gap: 10px; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 30; max-width: 360px; padding: 13px 16px; border: 1px solid rgba(255,107,107,0.25); border-radius: 12px; background: #211516; color: #ffc3c3; box-shadow: 0 15px 45px rgba(0,0,0,0.35); font-size: 12px; opacity: 0; transform: translateY(10px); pointer-events: none; transition: 180ms ease; }
 .toast.visible { opacity: 1; transform: translateY(0); }
 .toast.success { border-color: rgba(186,248,107,0.25); background: #142015; color: var(--lime); }
+
+/* Ultrawide workstations: use the canvas as a dashboard instead of leaving
+   most of it empty, while keeping cards and type comfortably readable. */
+@media (min-width: 1800px) {
+  .hero {
+    grid-template-columns: minmax(0, 2fr) minmax(360px, 0.55fr);
+    gap: 96px;
+    min-height: 350px;
+    padding: 72px 0 54px;
+  }
+
+  .metric-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .cpu-card { grid-column: span 6; }
+  .memory-card, .storage-card { grid-column: span 3; }
+  .network-card { grid-column: span 6; }
+
+  .panel { padding: 30px; }
+  .mount-list { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .disk-list { gap: 16px; }
+  .history-grid { gap: 16px; }
+  .operations-grid, .activity-grid, .lower-grid { gap: 20px; }
+
+  .nav a { font-size: 13px; }
+  .section-copy { max-width: 760px; font-size: 13px; }
+  .kicker, .mount-summary, .history-coverage { font-size: 10px; }
+  .disk-meta, .disk-kpis span, .io-grid span { font-size: 10px; }
+  .disk-kpis strong, .io-grid strong { font-size: 12px; }
+  .smart-pill, .service-state, .interface-state, .update-badge, .alert-summary { font-size: 9px; }
+  .smart-note, .test-hint, .schedule-footer span { font-size: 10px; }
+  .action-button, .primary-button { min-height: 38px; font-size: 11px; }
+}
 
 @media (max-width: 1000px) {
   .topbar { grid-template-columns: 1fr auto; }

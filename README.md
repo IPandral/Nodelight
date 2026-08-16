@@ -147,14 +147,19 @@ services:
     environment:
       SMART_ENABLED: "true"
       SMARTCTL_PATH: smartctl
-      SMART_DEVICE_ROOT: /host/dev
+      # Canonical /dev paths let smartctl auto-detect SATA and NVMe devices.
+      SMART_DEVICE_ROOT: /dev
     cap_add:
       - SYS_RAWIO
+      # Linux gates NVMe administrative commands, including self-tests, here.
+      - SYS_ADMIN
+      # Allows the root process to update /data after cap_drop: ALL.
+      - DAC_OVERRIDE
     devices:
-      - /dev/sda:/host/dev/sda:rwm
-      - /dev/sdb:/host/dev/sdb:rwm
+      - /dev/sda:/dev/sda:rwm
+      - /dev/sdb:/dev/sdb:rwm
       # Add each additional whole disk, for example:
-      # - /dev/nvme0n1:/host/dev/nvme0n1:rwm
+      # - /dev/nvme0n1:/dev/nvme0n1:rwm
 ```
 
 Confirm the numeric group in `.env` before starting the override:
@@ -169,10 +174,24 @@ Start both files, then verify that `smartctl` can open the mapped disks:
 
 ```bash
 docker compose -f compose.yaml -f compose.smart.yaml up -d
-docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -a /host/dev/sdb
+docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -a /dev/sdb
+docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -a /dev/nvme0n1
 ```
 
-If you use this repository's published Compose file, replace `compose.yaml` above with `docker-compose.release.yml`. Add a new `devices:` entry whenever a new physical disk is installed. Docker's device mapping makes each selected `/dev` node visible and grants its device-cgroup permissions; `SYS_RAWIO` permits the required disk-control operations. This is intentionally narrower than mounting the Docker socket or setting `privileged: true`, but raw-disk access is still sensitive. Only enable it for a trusted image on a trusted network.
+If you use this repository's published Compose file, replace `compose.yaml` above with `docker-compose.release.yml`. Add a new `devices:` entry whenever a new physical disk is installed. Map devices to their canonical paths (`/dev/sda:/dev/sda`, not `/dev/sda:/host/dev/sda`); recent `smartctl` versions may not auto-detect NVMe devices below a nonstandard directory and will ask for an explicit `-d` type. Docker's device mapping grants the selected nodes' device-cgroup permissions. `SYS_RAWIO` permits ordinary raw disk operations, while Linux requires `SYS_ADMIN` for NVMe administrative commands such as the optional device self-test. `DAC_OVERRIDE` lets SMART mode's root process keep writing schedule settings to the existing `/data` volume after the base configuration drops all capabilities. This is intentionally narrower than mounting the Docker socket or setting `privileged: true`, but `SYS_ADMIN` and raw-disk access are sensitive. Only enable SMART mode for a trusted image on a trusted network.
+
+Confirm self-test support and permissions directly when a drive remains unavailable:
+
+```bash
+# ATA/SATA
+docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -c /dev/sda
+
+# NVMe: "Self_Test" under Optional Admin Commands confirms firmware support.
+docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -d nvme -c /dev/nvme0n1
+docker compose -f compose.yaml -f compose.smart.yaml exec nodelight smartctl -d nvme -t short /dev/nvme0n1
+```
+
+An `NVME_IOCTL_ADMIN_CMD: Permission denied` result means the recreated container does not have `SYS_ADMIN`. An `Unable to save dashboard settings: EACCES` log entry means it does not have `DAC_OVERRIDE` (or the `/data` volume ownership has been customized). Compose capability and device changes require container recreation with `docker compose up -d --force-recreate`; a restart is not enough.
 
 The dashboard reports model, serial, health result, temperature, power-on time, wear/remaining life when the drive exposes it, and SMART error indicators. SATA, SAS, and NVMe drives expose different fields, so a missing attribute does not necessarily mean a fault. Some USB bridges and hardware RAID controllers hide SMART data or require controller-specific `smartctl` options that Nodelight cannot infer.
 
@@ -255,7 +274,7 @@ Edit `.env` before running Docker Compose.
 
 The Compose file mounts `/proc`, `/sys`, `/etc`, `/var/log`, and `/` into the container as read-only paths. Nodelight uses them to report real host metrics and recent host events instead of the container's own limits. The container drops Linux capabilities, runs as an unprivileged user, uses a read-only filesystem, and does **not** mount the Docker socket.
 
-The SMART override is the one exception: it opts selected physical device nodes into the container and adds `SYS_RAWIO`. Review that section before enabling it. Nodelight never needs `privileged: true`.
+The SMART override is the one exception: it opts selected physical device nodes into the container and adds `SYS_RAWIO`, `SYS_ADMIN`, and `DAC_OVERRIDE`. Review that section before enabling it. Nodelight never needs `privileged: true`.
 
 Some virtual machines do not expose temperature sensors. In that case the dashboard displays "Not exposed" and continues normally.
 
